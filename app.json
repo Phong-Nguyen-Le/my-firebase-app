@@ -51,6 +51,10 @@
         }
       ]
     ],
+    "extra": {
+      "googleWebClientId": "879508116009-i9i837fmvpdednf4c53vdp20m7a8c5g5.apps.googleusercontent.com",
+      "googleIosClientId": "879508116009-c4fc4gf8qt89msr9tsnfipru2fts83h9.apps.googleusercontent.com"
+    },
     "experiments": {
       "typedRoutes": true
     }

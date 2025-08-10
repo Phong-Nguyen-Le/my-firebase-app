@@ -1,13 +1,17 @@
-import { FirebaseUser } from "@/types/FirebaseUser";
+// Using Firebase Auth types from the library to ensure compatibility
+import { AUTH_ERROR, isAuthError } from "@/constants/AuthErrors";
+import type { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import {
   createUserWithEmailAndPassword,
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithCredential,
+  signInWithEmailAndPassword,
   signOut,
 } from "@react-native-firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import Constants from "expo-constants";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,32 +28,76 @@ import {
 
 export default function Chat() {
   const [initializing, setInitializing] = useState(true);
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  console.log("user", user);
+  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
   const [loginVisible, setLoginVisible] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
 
-  function handleAuthStateChanged(user) {
-    setUser(user);
-    if (initializing) setInitializing(false);
-    setLoginVisible(!user);
-    setIsLoading(false);
-  }
+  const handleAuthStateChanged = React.useCallback(
+    (currentUser: FirebaseAuthTypes.User | null) => {
+      setUser(currentUser);
+      if (initializing) setInitializing(false);
+      setLoginVisible(!currentUser);
+      setIsLoading(false);
+    },
+    [initializing]
+  );
 
   useEffect(() => {
     GoogleSignin.configure({
-      webClientId: "YOUR_WEB_CLIENT_ID", // Add your Google Web Client ID
+      // Web client ID (OAuth 2.0 client of type Web) from Google Cloud Console for this Firebase project
+      webClientId:
+        (Constants.expoConfig?.extra as any)?.googleWebClientId || undefined,
+      // iOS client ID from GoogleService-Info.plist (optional but recommended)
+      iosClientId:
+        (Constants.expoConfig?.extra as any)?.googleIosClientId || undefined,
+      // Android client ID from google-services.json (optional but recommended)
     });
 
     const subscriber = onAuthStateChanged(getAuth(), handleAuthStateChanged);
     return () => subscriber();
-  }, []);
+  }, [handleAuthStateChanged]);
 
-  const signInWithEmail = async () => {
+  const handleEmailLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter both email and password");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await signInWithEmailAndPassword(getAuth(), email, password);
+      setLoginVisible(false);
+      setEmail("");
+      setPassword("");
+    } catch (error: unknown) {
+      console.log("error", error);
+      setIsLoading(false);
+      if (isAuthError(error)) {
+        switch (error.code) {
+          case AUTH_ERROR.INVALID_EMAIL:
+            Alert.alert("Error", "That email address is invalid!");
+            break;
+          case AUTH_ERROR.INVALID_CREDENTIAL:
+          case AUTH_ERROR.WRONG_PASSWORD:
+            Alert.alert("Error", "Incorrect email or password.");
+            break;
+          case AUTH_ERROR.USER_NOT_FOUND:
+            Alert.alert("Error", "No account found with that email.");
+            break;
+          default:
+            Alert.alert("Error", "Failed to sign in. Please try again.");
+        }
+      } else {
+        Alert.alert("Error", "Failed to sign in. Please try again.");
+      }
+    }
+  };
+
+  const handleEmailRegister = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter both email and password");
       return;
@@ -60,18 +108,24 @@ export default function Chat() {
       setLoginVisible(false);
       setEmail("");
       setPassword("");
-      // linkWithCredential(
-      //   getAuth().currentUs
-      //   GoogleAuthProvider.credential()
-      // );
-    } catch (error: any) {
+    } catch (error: unknown) {
       setIsLoading(false);
-      if (error.code === "auth/email-already-in-use") {
-        Alert.alert("Error", "That email address is already in use!");
-      } else if (error.code === "auth/invalid-email") {
-        Alert.alert("Error", "That email address is invalid!");
+      if (isAuthError(error)) {
+        switch (error.code) {
+          case AUTH_ERROR.EMAIL_ALREADY_IN_USE:
+            Alert.alert("Error", "That email address is already in use!");
+            break;
+          case AUTH_ERROR.INVALID_EMAIL:
+            Alert.alert("Error", "That email address is invalid!");
+            break;
+          case AUTH_ERROR.WEAK_PASSWORD:
+            Alert.alert("Error", "Password is too weak.");
+            break;
+          default:
+            Alert.alert("Error", "Failed to create account. Please try again.");
+        }
       } else {
-        Alert.alert("Error", "Failed to sign in. Please try again.");
+        Alert.alert("Error", "Failed to create account. Please try again.");
       }
     }
   };
@@ -82,15 +136,14 @@ export default function Chat() {
       await GoogleSignin.hasPlayServices({
         showPlayServicesUpdateDialog: true,
       });
-      let idToken;
-      const signInResult = await GoogleSignin.signIn();
-      idToken = signInResult.data?.idToken;
-      if (!idToken) {
-        throw new Error("No ID token found");
-      }
+      console.log("chay toi day==================>");
+      await GoogleSignin.signIn();
+      const { idToken } = await GoogleSignin.getTokens();
+      console.log("chay toi day==================> 2");
+      if (!idToken) throw new Error("No ID token found");
       const googleCredential = GoogleAuthProvider.credential(idToken);
-      await signInWithCredential(getAuth(), googleCredential);
 
+      await signInWithCredential(getAuth(), googleCredential);
       setLoginVisible(false);
     } catch (error) {
       console.log("error", error);
@@ -104,7 +157,7 @@ export default function Chat() {
     try {
       await signOut(getAuth());
       setMessages([]);
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Failed to sign out. Please try again.");
     } finally {
       setIsLoading(false);
@@ -132,7 +185,9 @@ export default function Chat() {
       <Modal visible={loginVisible} animationType="slide" transparent>
         <View style={styles.modalWrap}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Sign in to continue</Text>
+            <Text style={styles.modalTitle}>
+              {isRegistering ? "Create your account" : "Sign in to continue"}
+            </Text>
 
             <TextInput
               placeholder="Email"
@@ -152,15 +207,30 @@ export default function Chat() {
 
             <TouchableOpacity
               style={[styles.primaryBtn, isLoading && styles.disabledBtn]}
-              onPress={signInWithEmail}
+              onPress={isRegistering ? handleEmailRegister : handleEmailLogin}
               disabled={isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.primaryBtnText}>Continue</Text>
+                <Text style={styles.primaryBtnText}>
+                  {isRegistering ? "Create account" : "Login"}
+                </Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.linkRow}>
+              <Text style={styles.linkText}>
+                {isRegistering
+                  ? "Already have an account? "
+                  : "Don't have an account? "}
+              </Text>
+              <TouchableOpacity onPress={() => setIsRegistering((v) => !v)}>
+                <Text style={styles.linkAction}>
+                  {isRegistering ? "Sign in" : "Register"}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.divider}>
               <View style={styles.line} />
@@ -298,6 +368,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   googleBtnText: {
+    fontWeight: "600",
+  },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  linkText: {
+    color: "#6b7280",
+  },
+  linkAction: {
+    color: "#2563eb",
     fontWeight: "600",
   },
   signOut: {
