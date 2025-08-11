@@ -136,10 +136,8 @@ export default function Chat() {
       await GoogleSignin.hasPlayServices({
         showPlayServicesUpdateDialog: true,
       });
-      console.log("chay toi day==================>");
       await GoogleSignin.signIn();
       const { idToken } = await GoogleSignin.getTokens();
-      console.log("chay toi day==================> 2");
       if (!idToken) throw new Error("No ID token found");
       const googleCredential = GoogleAuthProvider.credential(idToken);
 
@@ -182,9 +180,22 @@ export default function Chat() {
         </View>
       )}
 
-      <Modal visible={loginVisible} animationType="slide" transparent>
+      <Modal
+        visible={loginVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setLoginVisible(false)}
+      >
         <View style={styles.modalWrap}>
           <View style={styles.modalCard}>
+            {/* Close button */}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setLoginVisible(false)}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+
             <Text style={styles.modalTitle}>
               {isRegistering ? "Create your account" : "Sign in to continue"}
             </Text>
@@ -394,5 +405,16 @@ const styles = StyleSheet.create({
   },
   disabledBtn: {
     opacity: 0.6,
+  },
+  closeButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    padding: 5,
+    zIndex: 1,
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: "#6b7280",
   },
 });
